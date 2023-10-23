@@ -1,0 +1,554 @@
+const express = require('express')
+const app = express();
+const mime = require('mime')
+const path = require('path')
+const ExcelJS = require('exceljs');
+const router = express.Router()
+const fs = require('fs');
+const morgan = require('morgan');
+const cors = require('cors');
+const axios = require('axios');
+const fetch = require('node-fetch');
+
+const whiteList = ["http://localhost:3001"];
+app.use(cors({
+    origin: whiteList
+}));
+
+function unixFormatDate(unixDate) {
+    const date = new Date(unixDate);
+    const day = date.getDate();
+    const month = date.getMonth() + 1;
+    const year = date.getFullYear();
+    const formattedDateTime = day + "/" + month + "/" + year;
+    return formattedDateTime
+}
+
+async function downloadImage(url, filename) {
+    return new Promise(async (resolve, reject) => {
+        const response = await axios.get(url, { responseType: 'arraybuffer' });
+        fs.writeFile("./fotos/" + filename, response.data, (err) => {
+            if (err) reject(err);
+            resolve(true)
+        });
+    })
+}
+
+// async function getBase64Image(img, extensionFile) {
+//     return new Promise(async (resolve, reject) => {
+//         try {
+//             const response = await fetch(img);
+//             const blob = await response.arrayBuffer();
+//             const contentType = response.headers.get('content-type');
+//             const base64String = `data:${contentType};base64,${Buffer.from(blob).toString('base64')}`;
+//             resolve(base64String)
+//         } catch (err) {
+//             console.log(err);
+//             reject(err)
+//         }
+//     })
+
+//     // return new Promise(async (resolve, reject) => {
+//     //     axios.get(img, { responseType: 'arraybuffer' })
+//     //         .then(response => {
+//     //             let returnedB64 = `data:${contentType};base64,${Buffer.from(response.data).toString('base64')}`;
+//     //             resolve(returnedB64)
+//     //         })
+//     //         .catch(err => {
+//     //             console.log("ERRRRRROR:", err)
+//     //             reject(err)
+//     //         })
+//     // })
+// }
+
+
+let dateStr = ""
+let arrRoutesFotos = []
+
+// Función para generar el reporte
+function generarReporte(results, infoUser, idAppraise) {
+    arrRoutesFotos = []
+    
+    return new Promise(async (resolve, reject) => {
+        const arrTipoOferta = []
+        const arrCategoria = []
+        const arrADM = []
+        const arrSector = []
+        const arrFechaPubli = []
+        const arrAreaTerreno = []
+        const arrAreaConstru = []
+        const arrPrecioTotal = []
+        const arrCantHabitac = []
+        const arrCantBanios = []
+        const finalArrSheet = []
+
+        let strFechaPubli = ""
+        let strAreaTerreno = ""
+        let strAreaConstru = ""
+        let strPrecioTotal = ""
+        let strCantHabitac = ""
+        let strCantBanios = ""
+
+        if (results) {
+            for (const key in results.features) {
+                if (results.features[key].attributes.tipo_oferta) {
+                    arrTipoOferta.indexOf(results.features[key].attributes.tipo_oferta) === -1 ?
+                        arrTipoOferta.push(results.features[key].attributes.tipo_oferta) : null;
+                }
+                if (results.features[key].attributes.categoria) {
+                    arrCategoria.indexOf(results.features[key].attributes.categoria) === -1 ?
+                        arrCategoria.push(results.features[key].attributes.categoria) : null;
+                }
+                if (results.features[key].attributes.AreaDeMercado) {
+                    arrADM.indexOf(results.features[key].attributes.AreaDeMercado) === -1 ?
+                        arrADM.push(results.features[key].attributes.AreaDeMercado) : null;
+                }
+                if (results.features[key].attributes.Sector) {
+                    arrSector.indexOf(results.features[key].attributes.Sector) === -1 ?
+                        arrSector.push(results.features[key].attributes.Sector) : null;
+                }
+                
+                if (results.features[key].attributes.fecha_publicacion) {
+                    arrFechaPubli.indexOf(results.features[key].attributes.fecha_publicacion) === -1 ?
+                        arrFechaPubli.push(results.features[key].attributes.fecha_publicacion) : null;
+                }
+                if (results.features[key].attributes.area_terreno) {
+                    arrAreaTerreno.indexOf(results.features[key].attributes.area_terreno) === -1 ?
+                        arrAreaTerreno.push(results.features[key].attributes.area_terreno) : null;
+                }
+                if (results.features[key].attributes.area_construccion) {
+                    arrAreaConstru.indexOf(results.features[key].attributes.area_construccion) === -1 ?
+                        arrAreaConstru.push(results.features[key].attributes.area_construccion) : null;
+                }
+                if (results.features[key].attributes.precio_total) {
+                    arrPrecioTotal.indexOf(results.features[key].attributes.precio_total) === -1 ?
+                        arrPrecioTotal.push(results.features[key].attributes.precio_total) : null;
+                }
+                if (results.features[key].attributes.cant_habitaciones) {
+                    arrCantHabitac.indexOf(results.features[key].attributes.cant_habitaciones) === -1 ?
+                        arrCantHabitac.push(results.features[key].attributes.cant_habitaciones) : null;
+                }
+                if (results.features[key].attributes.cant_banos) {
+                    arrCantBanios.indexOf(results.features[key].attributes.cant_banos) === -1 ?
+                        arrCantBanios.push(results.features[key].attributes.cant_banos) : null;
+                }
+
+                finalArrSheet.push([
+                    '',
+                    parseFloat(key) + 1,
+                    results.features[key].attributes.OBJECTID,
+                    unixFormatDate(results.features[key].attributes.fecha_publicacion),
+                    results.features[key].attributes.precio_total,
+                    results.features[key].attributes.area_terreno,
+                    results.features[key].attributes.precio_m2_terreno,
+                    results.features[key].attributes.area_construccion,
+                    results.features[key].attributes.precio_m2_construccion,
+                    results.features[key].attributes.nombre_vendedor,
+                    results.features[key].attributes.ubicacion,
+                    results.features[key].attributes.attachment,
+                    "",//results.features[key].attributes.detalles,
+                ])
+            }
+
+            if (arrFechaPubli.length > 0) {
+                strFechaPubli = unixFormatDate(Math.min(...arrFechaPubli)) + " al " + unixFormatDate(Math.max(...arrFechaPubli))
+            }
+            if (arrAreaTerreno.length > 0) {
+                strAreaTerreno = Math.min(...arrAreaTerreno) + " m² - " + Math.max(...arrAreaTerreno) + " m²"
+            }
+            if (arrAreaConstru.length > 0) {
+                strAreaConstru = Math.min(...arrAreaConstru) + " m² - " + Math.max(...arrAreaConstru) + " m²"
+            }
+            if (arrPrecioTotal.length > 0) {
+                strPrecioTotal = "$ " + Math.min(...arrPrecioTotal) + " - $ " + Math.max(...arrPrecioTotal)
+            }
+            if (arrCantHabitac.length > 0) {
+                strCantHabitac = Math.min(...arrCantHabitac) + " - " + Math.max(...arrCantHabitac)
+            }
+            if (arrCantBanios.length > 0) {
+                strCantBanios = Math.min(...arrCantBanios) + " - " + Math.max(...arrCantBanios)
+            }
+        }
+
+        const date = new Date();
+        dateStr =
+            ("00" + (date.getMonth() + 1)).slice(-2) +
+            ("00" + date.getDate()).slice(-2) +
+            date.getFullYear() + "_" +
+            ("00" + date.getHours()).slice(-2) +
+            ("00" + date.getMinutes()).slice(-2) +
+            ("00" + date.getSeconds()).slice(-2) +
+            ("00" + date.getMilliseconds()).slice(-2);
+
+        // Crea un nuevo libro de trabajo (workbook)
+        const workbook = new ExcelJS.Workbook();
+
+        // Crea una nueva hoja de trabajo (worksheet)
+        const worksheet = workbook.addWorksheet('Reporte');
+
+        // Establecer el título
+        worksheet.mergeCells('B2:M2');
+        const titleCell = worksheet.getCell('B2');
+        titleCell.value = 'Resultados de Búsqueda';
+        // Establecer el estilo del título
+        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        titleCell.font = { color: { argb: 'FFFFFF' }, bold: false };
+        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '002060' } };
+
+        // Izquierdo
+        // Establecer el subtítulo izquierdo
+        worksheet.mergeCells('B4:D4');
+        const subTitleIzqCell = worksheet.getCell('B4');
+        subTitleIzqCell.value = 'Expotación';
+        // Establecer el estilo del subtítulo izquierdo
+        subTitleIzqCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        subTitleIzqCell.font = { color: { argb: 'FFFFFF' }, bold: false };
+        subTitleIzqCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '2F75B5' } };
+        // Datos - Fecha
+        const dataFecha = worksheet.getCell('B5');
+        dataFecha.value = 'Fecha';
+        dataFecha.font = { bold: true };
+        worksheet.mergeCells('C5:D5');
+        worksheet.getCell('C5').value = date.toLocaleDateString('en-GB')
+        // Datos - Usuario
+        const dataUsuario = worksheet.getCell('B6');
+        dataUsuario.value = 'Usuario';
+        dataUsuario.font = { bold: true };
+        worksheet.mergeCells('C6:D6');
+        worksheet.getCell('C6').value = infoUser.UserID
+        // Datos - ID Avalúo
+        const dataIDAvaluo = worksheet.getCell('B7');
+        dataIDAvaluo.value = 'ID Avalúo';
+        dataIDAvaluo.font = { bold: true };
+        worksheet.mergeCells('C7:D7');
+        worksheet.getCell('C7').value = idAppraise !== 'null' ? idAppraise : ""
+
+        // Establecer el subtítulo derecho
+        worksheet.mergeCells('F4:K4');
+        const subTitleDerCell = worksheet.getCell('F4');
+        subTitleDerCell.value = 'Parámetros de búsqueda';
+        // Establecer el estilo del subtítulo derecho
+        subTitleDerCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        subTitleDerCell.font = { color: { argb: 'FFFFFF' }, bold: false };
+        subTitleDerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '2F75B5' } };
+        // Datos - Operación
+        const dataOperacion = worksheet.getCell('F5');
+        dataOperacion.value = 'Operación';
+        dataOperacion.font = { bold: true };
+        worksheet.mergeCells('G5:H5');
+        worksheet.getCell('G5').value = String(arrTipoOferta)
+        // Datos - Categoria
+        const dataCategoria = worksheet.getCell('F6');
+        dataCategoria.value = 'Categoria';
+        dataCategoria.font = { bold: true };
+        worksheet.mergeCells('G6:H6');
+        worksheet.getCell('G6').value = String(arrCategoria)
+        // Datos - ID Fecha de publicación
+        const dataFechaPubli = worksheet.getCell('F7');
+        dataFechaPubli.value = 'Fecha de publicación';
+        dataFechaPubli.font = { bold: true };
+        worksheet.mergeCells('G7:H7');
+        worksheet.getCell('G7').value = strFechaPubli
+        // Datos - ADM
+        const dataADM = worksheet.getCell('F8');
+        dataADM.value = 'ADM';
+        dataADM.font = { bold: true };
+        worksheet.mergeCells('G8:H8');
+        worksheet.getCell('G8').value = String(arrADM)
+        // Datos - Sector
+        const dataSector = worksheet.getCell('F9');
+        dataSector.value = 'Sector';
+        dataSector.font = { bold: true };
+        worksheet.mergeCells('G9:H9');
+        worksheet.getCell('G9').value = String(arrSector)
+        // Datos - Área terreno entre
+        const dataAreaTerreno = worksheet.getCell('I5');
+        dataAreaTerreno.value = 'Área terreno entre';
+        dataAreaTerreno.font = { bold: true };
+        worksheet.mergeCells('J5:K5');
+        worksheet.getCell('J5').value = strAreaTerreno
+        // Datos - Área construcción entre
+        const dataAreaConst = worksheet.getCell('I6');
+        dataAreaConst.value = 'Área construcción entre';
+        dataAreaConst.font = { bold: true };
+        worksheet.mergeCells('J6:K6');
+        worksheet.getCell('J6').value = strAreaConstru
+        // Datos - Precio entre
+        const dataPrecio = worksheet.getCell('I7');
+        dataPrecio.value = 'Precio entre';
+        dataPrecio.font = { bold: true };
+        worksheet.mergeCells('J7:K7');
+        worksheet.getCell('J7').value = strPrecioTotal
+        // Datos - Habitaciones
+        const dataHabitaciones = worksheet.getCell('I8');
+        dataHabitaciones.value = 'Habitaciones';
+        dataHabitaciones.font = { bold: true };
+        worksheet.mergeCells('J8:K8');
+        worksheet.getCell('J8').value = strCantHabitac
+        // Datos - Baños
+        const dataBanios = worksheet.getCell('I9');
+        dataBanios.value = 'Baños';
+        dataBanios.font = { bold: true };
+        worksheet.mergeCells('J9:K9');
+        worksheet.getCell('J9').value = strCantBanios
+
+        // Establecer el ancho de las columnas
+        worksheet.getColumn(1).width = 2;
+        worksheet.getColumn(2).width = 13
+        worksheet.getColumn(3).width = 13
+        worksheet.getColumn(4).width = 17
+        worksheet.getColumn(5).width = 15
+        worksheet.getColumn(6).width = 20
+        worksheet.getColumn(7).width = 15
+        worksheet.getColumn(8).width = 22
+        worksheet.getColumn(9).width = 23
+        worksheet.getColumn(10).width = 15
+        worksheet.getColumn(11).width = 30;
+        worksheet.getColumn(12).width = 30;
+        worksheet.getColumn(13).width = 30;
+
+        // Carga la imagen desde una URL o ruta local
+        worksheet.mergeCells('L4:M9');
+        const imageId = workbook.addImage({
+            filename: './logo_datagis.png',
+            extension: 'jpg',
+        });
+
+        // Añade la imagen a una celda específica
+        worksheet.addImage(imageId, {
+            tl: { col: 11.9, row: 3 }, // Especifica la columna y fila de la celda superior izquierda
+            ext: { width: 150, height: 120 },
+            editAs: 'oneCell',
+        });
+
+        // Header
+        const stylerHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'DBDBDB' } }
+        const fontHeader = { bold: true }
+        const headerItem = worksheet.getCell('B11');
+        headerItem.value = 'Item';
+        headerItem.font = fontHeader
+        headerItem.fill = stylerHeader;
+        const headerIDOferta = worksheet.getCell('C11');
+        headerIDOferta.value = 'IdOferta';
+        headerIDOferta.font = fontHeader
+        headerIDOferta.fill = stylerHeader;
+        const headerFechaPub = worksheet.getCell('D11');
+        headerFechaPub.value = 'Fecha publicación';
+        headerFechaPub.font = fontHeader
+        headerFechaPub.fill = stylerHeader;
+        const headerPrecioUSD = worksheet.getCell('E11');
+        headerPrecioUSD.value = 'Precio $ USD';
+        headerPrecioUSD.font = fontHeader
+        headerPrecioUSD.fill = stylerHeader;
+        const headerAreaTerreno = worksheet.getCell('F11');
+        headerAreaTerreno.value = 'Área Terreno (m²)';
+        headerAreaTerreno.font = fontHeader
+        headerAreaTerreno.fill = stylerHeader;
+        const headerPrecioTerr = worksheet.getCell('G11');
+        headerPrecioTerr.value = 'Precio x m²';
+        headerPrecioTerr.font = fontHeader
+        headerPrecioTerr.fill = stylerHeader;
+        const headerAreaConst = worksheet.getCell('H11');
+        headerAreaConst.value = 'Área construcción (m²)';
+        headerAreaConst.font = fontHeader
+        headerAreaConst.fill = stylerHeader;
+        const headerPrecioConst = worksheet.getCell('I11');
+        headerPrecioConst.value = 'Precio x m²';
+        headerPrecioConst.font = fontHeader
+        headerPrecioConst.fill = stylerHeader;
+        const headerVendedor = worksheet.getCell('J11');
+        headerVendedor.value = 'Vendedor';
+        headerVendedor.font = fontHeader
+        headerVendedor.fill = stylerHeader;
+        const headerUbicacion = worksheet.getCell('K11');
+        headerUbicacion.value = 'Ubicación';
+        headerUbicacion.font = fontHeader
+        headerUbicacion.fill = stylerHeader;
+        const headerImagen = worksheet.getCell('L11');
+        headerImagen.value = 'Imagen Principal';
+        headerImagen.font = fontHeader
+        headerImagen.fill = stylerHeader;
+        const headerObserva = worksheet.getCell('M11');
+        headerObserva.value = 'Observaciones';
+        headerObserva.font = fontHeader
+        headerObserva.fill = stylerHeader;
+
+        // Bordes
+        worksheet.getCell('B2').border = { top: { style: 'thin' }, left: { style: 'thin' } };
+        worksheet.getCell('B3').border = { left: { style: 'thin' } };
+        worksheet.getCell('B4').border = { left: { style: 'thin' } };
+        worksheet.getCell('B5').border = { left: { style: 'thin' } };
+        worksheet.getCell('B6').border = { left: { style: 'thin' } };
+        worksheet.getCell('B7').border = { left: { style: 'thin' } };
+        worksheet.getCell('B8').border = { left: { style: 'thin' } };
+        worksheet.getCell('B9').border = { left: { style: 'thin' }, bottom: { style: 'thin' } };
+        worksheet.getCell('C2').border = { top: { style: 'thin' } };
+        worksheet.getCell('D2').border = { top: { style: 'thin' } };
+        worksheet.getCell('E2').border = { top: { style: 'thin' } };
+        worksheet.getCell('F2').border = { top: { style: 'thin' } };
+        worksheet.getCell('G2').border = { top: { style: 'thin' } };
+        worksheet.getCell('H2').border = { top: { style: 'thin' } };
+        worksheet.getCell('I2').border = { top: { style: 'thin' } };
+        worksheet.getCell('J2').border = { top: { style: 'thin' } };
+        worksheet.getCell('K2').border = { top: { style: 'thin' } };
+        worksheet.getCell('L2').border = { top: { style: 'thin' } };
+        worksheet.getCell('M2').border = { top: { style: 'thin' }, right: { style: 'thin' } };
+        worksheet.getCell('N3').border = { left: { style: 'thin' } };
+        worksheet.getCell('N4').border = { left: { style: 'thin' } };
+        worksheet.getCell('N5').border = { left: { style: 'thin' } };
+        worksheet.getCell('N6').border = { left: { style: 'thin' } };
+        worksheet.getCell('N7').border = { left: { style: 'thin' } };
+        worksheet.getCell('N8').border = { left: { style: 'thin' } };
+        worksheet.getCell('N9').border = { left: { style: 'thin' } };
+        worksheet.getCell('M9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('C9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('D9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('E9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('F9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('G9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('H9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('I9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('J9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('K9').border = { bottom: { style: 'thin' } };
+        worksheet.getCell('L9').border = { bottom: { style: 'thin' } };
+        // Border Header
+        worksheet.getCell('B11').border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('C11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('D11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('E11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('F11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('G11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('H11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('I11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('J11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('K11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('L11').border = { top: { style: 'thin' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+        worksheet.getCell('M11').border = { top: { style: 'thin' }, right: { style: 'thin' }, bottom: { style: 'hair' } };
+
+        const nameColums = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M']
+
+        for (const key in finalArrSheet) {
+            const row = worksheet.getRow(12 + Number(key));
+            row.height = 100;
+
+            for (const subKey in finalArrSheet[key]) {
+                if (subKey > 0) {
+                    if (subKey !== "11") {
+                        const dataItem = worksheet.getCell(nameColums[subKey] + (12 + Number(key)));
+                        dataItem.value = finalArrSheet[key][subKey];
+                        dataItem.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    } else {
+                        if(finalArrSheet[key][subKey]) {
+                            const extensionFile = finalArrSheet[key][subKey].contentType.split("/").pop();
+                            const nameFoto = finalArrSheet[key][2] + "_" + dateStr + "." + extensionFile
+                            await downloadImage(finalArrSheet[key][subKey].url, nameFoto)
+                            arrRoutesFotos.push(nameFoto)
+                            // const myBase64Image = await getBase64Image(finalArrSheet[key][subKey].url)
+    
+                            // Carga la imagen desde una URL o ruta local
+                            const imageId = workbook.addImage({
+                                filename: "./fotos/" + nameFoto,
+                                extension: extensionFile,
+                            });
+    
+                            // Añade la imagen a una celda específica
+                            worksheet.addImage(imageId, {
+                                tl: { col: 11.2, row: 11 + Number(key) + 0.3 },
+                                ext: { width: 180, height: 120 },
+                                editAs: 'oneCell',
+                            });
+                        }
+                    }
+
+                    switch (subKey) {
+                        case "1":
+                            worksheet.getCell(nameColums[subKey] + (12 + Number(key))).border = {
+                                top: { style: 'hair' }, right: { style: 'hair' }, left: { style: 'thin' }
+                            };
+                            break;
+                        case "12":
+                            worksheet.getCell(nameColums[subKey] + (12 + Number(key))).border = {
+                                top: { style: 'hair' }, right: { style: 'thin' }
+                            };
+                            break;
+                        default:
+                            worksheet.getCell(nameColums[subKey] + (12 + Number(key))).border = {
+                                top: { style: 'hair' }, right: { style: 'hair' }
+                            };
+                            break;
+                    }
+
+                    if (Number(key) + 1 === finalArrSheet.length) {
+                        switch (subKey) {
+                            case "1":
+                                worksheet.getCell(nameColums[subKey] + (12 + Number(key))).border = {
+                                    top: { style: 'hair' }, right: { style: 'hair' }, left: { style: 'thin' }, bottom: { style: 'thin' }
+                                };
+                                break;
+                            case "12":
+                                worksheet.getCell(nameColums[subKey] + (12 + Number(key))).border = {
+                                    top: { style: 'hair' }, right: { style: 'thin' }, bottom: { style: 'thin' }
+                                };
+                                break;
+                            default:
+                                worksheet.getCell(nameColums[subKey] + (12 + Number(key))).border = {
+                                    top: { style: 'hair' }, right: { style: 'hair' }, bottom: { style: 'thin' }
+                                };
+                                break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Guarda el archivo XLSX
+        workbook.xlsx.writeFile('reporte_' + dateStr + '.xlsx')
+            .then(function () {
+                console.log('El reporte se ha generado correctamente');
+                resolve({
+                    success: true,
+                    response: 'El reporte se ha generado correctamente.'
+                })
+            })
+            .catch(function (error) {
+                console.log('Hubo un error al generar el reporte:', error);
+                reject({
+                    success: false,
+                    response: error
+                })
+            });
+    })
+}
+
+router.post("/generar-reporte", async (req, res, next) => {
+    try {
+        const { data, infoUser, idAppraise } = req.body
+        await generarReporte(data, infoUser, idAppraise)
+
+        const filePath = __dirname + "/reporte_" + dateStr + ".xlsx"
+        const fileName = path.basename(filePath)
+        res.setHeader("Content-Disposition", "attachment;filename=" + fileName)
+        res.setHeader("Content-Type", mime.getType(filePath))
+
+        res.download(filePath, fileName, (err) => {
+            fs.unlinkSync(filePath);
+            for (const key in arrRoutesFotos) {
+                fs.unlinkSync(__dirname + "/fotos/" + arrRoutesFotos[key]);
+            }
+            if (err) {
+                console.error('Error al descargar el archivo:', err);
+                res.status(500).send('Error al descargar el archivo');
+            }
+        });
+    } catch (error) {
+        console.log(error)
+        return res.status(400).json({ error: error });
+    }
+})
+
+app.set('port', process.env.PORT || 3004);
+app.set('json spaces', 2)
+app.use(express.json({limit: '100mb'}));
+app.use(express.urlencoded({limit: '100mb'}));
+app.use('/', router)
+app.listen(app.get('port'), () => { console.log('Server running on port 3004'); })
